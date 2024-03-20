@@ -280,6 +280,36 @@ class VideoJsController {
     VideoJsResults().listenToValueFromJs(playerId, 'onReady', onReady);
   }
 
+  /// Adiciona um listener para erros no player de vídeo
+  addErrorListener(Function(String) onError) {
+    final html.Element scriptElement = html.ScriptElement()
+      ..id = "onPlayerError"
+      ..innerHtml = '''
+        const player = videojs('$playerId');
+        player.on('error', function() {
+          window.dartCallback.postMessage(JSON.stringify({
+            "type": "error",
+            "message": player.error().message
+          }));
+        });
+      ''';
+
+    final html.Element? existingScript = html.querySelector("#onPlayerError");
+    if (existingScript != null) {
+      existingScript.remove();
+    }
+
+    html.querySelector('body')!.children.add(scriptElement);
+
+    html.window.onMessage.listen((event) {
+      final Map<String, dynamic> message =
+          Map<String, dynamic>.from(event.data);
+      if (message['type'] == 'error') {
+        onError(message['message']);
+      }
+    });
+  }
+
   /// This method is available on all Video.js players and components.
   /// It is the only supported method of removing a Video.js player from both the DOM and memory.
   dispose() {
