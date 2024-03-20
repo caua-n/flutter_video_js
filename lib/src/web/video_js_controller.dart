@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:html' as html;
 
 import 'package:video_js/src/models/videoJs_options.dart';
@@ -280,17 +281,25 @@ class VideoJsController {
     VideoJsResults().listenToValueFromJs(playerId, 'onReady', onReady);
   }
 
-  /// Adiciona um listener para erros no player de vídeo
+  /// Adiciona um listener para erros no player de vídeo.
   addErrorListener(Function(String) onError) {
     final html.Element scriptElement = html.ScriptElement()
       ..id = "onPlayerError"
       ..innerHtml = '''
         const player = videojs('$playerId');
         player.on('error', function() {
-          window.dartCallback.postMessage(JSON.stringify({
-            "type": "error",
-            "message": player.error().message
-          }));
+          const error = player.error();
+          if (error && error.name === 'NotAllowedError' && error.code === DOMException.PLAY_FAILED) {
+            window.parent.postMessage(JSON.stringify({
+              "type": "play_error",
+              "message": "O vídeo não pode ser reproduzido porque o usuário não interagiu com o documento."
+            }), "*");
+          } else {
+            window.parent.postMessage(JSON.stringify({
+              "type": "error",
+              "message": error ? error.message : ""
+            }), "*");
+          }
         });
       ''';
 
@@ -303,9 +312,9 @@ class VideoJsController {
 
     html.window.onMessage.listen((event) {
       final Map<String, dynamic> message =
-          Map<String, dynamic>.from(event.data);
-      if (message['type'] == 'error') {
-        onError(message['message']);
+          json.decode(event.data as String) as Map<String, dynamic>;
+      if (message['type'] == 'play_error') {
+        onError(message['message'] as String);
       }
     });
   }
